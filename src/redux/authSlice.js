@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { loginUser, registerUser, logoutUser, getUser } from '../services/authService';
+import { updateProfile as updateProfileApi, changePassword as changePasswordApi } from '../services/profileService';
 
 export const login = createAsyncThunk('auth/login', async (credentials, { rejectWithValue }) => {
   try {
@@ -30,6 +31,23 @@ export const fetchUser = createAsyncThunk('auth/fetchUser', async (_, { rejectWi
     return await getUser();
   } catch (err) {
     return rejectWithValue(err.response?.data || { message: 'Failed to fetch user' });
+  }
+});
+
+export const updateProfile = createAsyncThunk('auth/updateProfile', async (data, { rejectWithValue }) => {
+  try {
+    const result = await updateProfileApi(data);
+    return result.data;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || 'Failed to update profile');
+  }
+});
+
+export const changePassword = createAsyncThunk('auth/changePassword', async (data, { rejectWithValue }) => {
+  try {
+    await changePasswordApi(data);
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.errors?.current_password?.[0] || err.response?.data?.message || 'Failed to change password');
   }
 });
 
@@ -73,6 +91,9 @@ const authSlice = createSlice({
       })
       .addCase(fetchUser.fulfilled, (state, action) => {
         state.user = action.payload.user;
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.user = action.payload;
       });
   },
 });
