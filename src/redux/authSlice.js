@@ -1,12 +1,15 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { loginUser, registerUser, logoutUser, getUser } from '../services/authService';
+import { loginUser, registerUser, logoutUser, saveUser } from '../services/authService';
 import { updateProfile as updateProfileApi, changePassword as changePasswordApi } from '../services/profileService';
+import { errorMessage } from '../services/api';
+import { resetData } from './dataSlice';
+import { resetSync } from './syncSlice';
 
 export const login = createAsyncThunk('auth/login', async (credentials, { rejectWithValue }) => {
   try {
     return await loginUser(credentials);
   } catch (err) {
-    return rejectWithValue(err.response?.data || { message: 'Login failed' });
+    return rejectWithValue(errorMessage(err, 'Login failed'));
   }
 });
 
@@ -14,32 +17,23 @@ export const register = createAsyncThunk('auth/register', async (data, { rejectW
   try {
     return await registerUser(data);
   } catch (err) {
-    return rejectWithValue(err.response?.data || { message: 'Registration failed' });
+    return rejectWithValue(errorMessage(err, 'Registration failed'));
   }
 });
 
-export const logout = createAsyncThunk('auth/logout', async (_, { rejectWithValue }) => {
-  try {
-    await logoutUser();
-  } catch (err) {
-    return rejectWithValue(err.response?.data || { message: 'Logout failed' });
-  }
-});
-
-export const fetchUser = createAsyncThunk('auth/fetchUser', async (_, { rejectWithValue }) => {
-  try {
-    return await getUser();
-  } catch (err) {
-    return rejectWithValue(err.response?.data || { message: 'Failed to fetch user' });
-  }
+export const logout = createAsyncThunk('auth/logout', async (_, { dispatch }) => {
+  await logoutUser();
+  dispatch(resetData());
+  dispatch(resetSync());
 });
 
 export const updateProfile = createAsyncThunk('auth/updateProfile', async (data, { rejectWithValue }) => {
   try {
     const result = await updateProfileApi(data);
+    await saveUser(result.data);
     return result.data;
   } catch (err) {
-    return rejectWithValue(err.response?.data?.message || 'Failed to update profile');
+    return rejectWithValue(errorMessage(err, 'Failed to update profile'));
   }
 });
 
@@ -47,7 +41,7 @@ export const changePassword = createAsyncThunk('auth/changePassword', async (dat
   try {
     await changePasswordApi(data);
   } catch (err) {
-    return rejectWithValue(err.response?.data?.errors?.current_password?.[0] || err.response?.data?.message || 'Failed to change password');
+    return rejectWithValue(errorMessage(err, 'Failed to change password'));
   }
 });
 
@@ -56,12 +50,17 @@ const authSlice = createSlice({
   initialState: {
     user: null,
     token: null,
+    restoring: true,
     loading: false,
     error: null,
   },
   reducers: {
     clearError: (state) => { state.error = null; },
-    setToken: (state, action) => { state.token = action.payload; },
+    restoreSession: (state, action) => {
+      state.token = action.payload?.token || null;
+      state.user = action.payload?.user || null;
+      state.restoring = false;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -73,7 +72,7 @@ const authSlice = createSlice({
       })
       .addCase(login.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload?.message || 'Login failed';
+        state.error = action.payload || 'Login failed';
       })
       .addCase(register.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(register.fulfilled, (state, action) => {
@@ -83,14 +82,11 @@ const authSlice = createSlice({
       })
       .addCase(register.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload?.message || 'Registration failed';
+        state.error = action.payload || 'Registration failed';
       })
       .addCase(logout.fulfilled, (state) => {
         state.user = null;
         state.token = null;
-      })
-      .addCase(fetchUser.fulfilled, (state, action) => {
-        state.user = action.payload.user;
       })
       .addCase(updateProfile.fulfilled, (state, action) => {
         state.user = action.payload;
@@ -98,5 +94,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, setToken } = authSlice.actions;
+export const { clearError, restoreSession } = authSlice.actions;
 export default authSlice.reducer;

@@ -1,45 +1,48 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { getQueue } from '../services/syncQueue';
-import { processSyncQueue } from '../services/syncService';
-
-export const refreshPendingCount = createAsyncThunk('sync/refreshPendingCount', async () => {
-  const queue = await getQueue();
-  return queue.length;
-});
-
-export const runSync = createAsyncThunk('sync/run', async (_, { dispatch, getState }) => {
-  const { sync } = getState();
-  if (sync.syncing) return { succeeded: 0, failed: 0 };
-
-  const result = await processSyncQueue();
-  await dispatch(refreshPendingCount());
-  return result;
-});
+import { createSlice } from '@reduxjs/toolkit';
+import { DEFAULT_SYNC_INTERVAL_MINUTES } from '../config';
 
 const syncSlice = createSlice({
   name: 'sync',
   initialState: {
     isOnline: true,
-    pendingCount: 0,
     syncing: false,
+    queue: [],            // full queue, for the Sync Activity screen
+    pendingCount: 0,
+    failedCount: 0,
     lastSyncAt: null,
+    lastResult: null,
+    conflictLog: [],
+    autoSync: true,
+    intervalMinutes: DEFAULT_SYNC_INTERVAL_MINUTES,
   },
   reducers: {
     setOnline: (state, action) => { state.isOnline = action.payload; },
-  },
-  extraReducers: (builder) => {
-    builder
-      .addCase(refreshPendingCount.fulfilled, (state, action) => {
-        state.pendingCount = action.payload;
-      })
-      .addCase(runSync.pending, (state) => { state.syncing = true; })
-      .addCase(runSync.fulfilled, (state) => {
-        state.syncing = false;
-        state.lastSyncAt = new Date().toISOString();
-      })
-      .addCase(runSync.rejected, (state) => { state.syncing = false; });
+    syncStarted: (state) => { state.syncing = true; },
+    syncFinished: (state, action) => {
+      state.syncing = false;
+      state.lastResult = action.payload;
+    },
+    setSyncInfo: (state, action) => {
+      const { queue, lastSyncAt, lastResult, conflictLog, autoSync, intervalMinutes } = action.payload;
+      state.queue = queue;
+      state.pendingCount = queue.filter((m) => m.status === 'pending').length;
+      state.failedCount = queue.filter((m) => m.status === 'failed').length;
+      state.lastSyncAt = lastSyncAt;
+      if (lastResult) state.lastResult = lastResult;
+      state.conflictLog = conflictLog;
+      state.autoSync = autoSync;
+      state.intervalMinutes = intervalMinutes;
+    },
+    resetSync: (state) => {
+      state.queue = [];
+      state.pendingCount = 0;
+      state.failedCount = 0;
+      state.lastSyncAt = null;
+      state.lastResult = null;
+      state.conflictLog = [];
+    },
   },
 });
 
-export const { setOnline } = syncSlice.actions;
+export const { setOnline, syncStarted, syncFinished, setSyncInfo, resetSync } = syncSlice.actions;
 export default syncSlice.reducer;

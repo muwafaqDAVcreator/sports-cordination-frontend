@@ -1,85 +1,80 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, View, Text, FlatList, ActivityIndicator } from 'react-native';
-import { useDispatch, useSelector } from 'react-redux';
-import { fetchStandings } from '../redux/resultsSlice';
+import React, { useMemo } from 'react';
+import { StyleSheet, View, Text, ScrollView } from 'react-native';
+import { useSelector } from 'react-redux';
+import { selectEvent } from '../redux/dataSlice';
+import { eventStandings } from '../logic/standings';
+import { colors } from '../theme';
 
-const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
+const MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
-function RankingItem({ item }) {
-  return (
-    <View style={styles.rankItem}>
-      <Text style={styles.medal}>{MEDALS[item.placement] || `#${item.placement}`}</Text>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.athleteName}>{item.athlete.name}</Text>
-        <Text style={styles.athleteHouse}>{item.athlete.house || '—'}</Text>
-      </View>
-      <Text style={styles.time}>{item.time || ''}</Text>
-    </View>
-  );
-}
-
+/** Computed on the device from local results, so it is correct offline (FR3). */
 export default function StandingsScreen({ route }) {
-  const { eventId, eventName } = route.params;
-  const dispatch = useDispatch();
-  const { rankings, housePoints, loading } = useSelector((state) => state.results);
-
-  useEffect(() => {
-    dispatch(fetchStandings(eventId));
-  }, [eventId]);
-
-  const houseEntries = Object.entries(housePoints);
-
-  if (loading) {
-    return <ActivityIndicator size="large" color="#1F4788" style={{ marginTop: 40 }} />;
-  }
+  const { eventUuid } = route.params;
+  const event = useSelector(selectEvent(eventUuid));
+  const { results, athletes } = useSelector((s) => s.data);
+  const { rankings, medalTable } = useMemo(() => eventStandings(eventUuid, results, athletes), [eventUuid, results, athletes]);
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 30 }}>
       <View style={styles.header}>
-        <Text style={styles.title}>{eventName}</Text>
-        <Text style={styles.subtitle}>Standings</Text>
+        <Text style={styles.title}>{event?.name}</Text>
+        <Text style={styles.sub}>Scoring: 1st 5 pts · 2nd 3 pts · 3rd 1 pt</Text>
       </View>
 
-      {houseEntries.length > 0 && (
-        <View style={styles.housePointsSection}>
-          <Text style={styles.sectionTitle}>🏠 House Points</Text>
-          {houseEntries.map(([house, points]) => (
-            <View key={house} style={styles.houseRow}>
-              <Text style={styles.houseName}>{house}</Text>
-              <Text style={styles.housePointsValue}>{points} pts</Text>
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>House medal table</Text>
+        {medalTable.length === 0 ? <Text style={styles.empty}>No placings recorded yet</Text> : (
+          <>
+            <View style={styles.row}>
+              <Text style={[styles.house, styles.head]}>House</Text>
+              {['🥇', '🥈', '🥉', 'Pts'].map((h) => <Text key={h} style={[styles.cell, styles.head]}>{h}</Text>)}
             </View>
-          ))}
-        </View>
-      )}
-
-      <View style={styles.rankingsSection}>
-        <Text style={styles.sectionTitle}>🏃 Rankings</Text>
-        <FlatList
-          data={rankings}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <RankingItem item={item} />}
-          ListEmptyComponent={<Text style={styles.emptyText}>No results entered yet</Text>}
-        />
+            {medalTable.map((r) => (
+              <View key={r.house} style={styles.row}>
+                <Text style={styles.house}>{r.house}</Text>
+                <Text style={styles.cell}>{r.gold}</Text>
+                <Text style={styles.cell}>{r.silver}</Text>
+                <Text style={styles.cell}>{r.bronze}</Text>
+                <Text style={[styles.cell, styles.points]}>{r.points}</Text>
+              </View>
+            ))}
+          </>
+        )}
       </View>
-    </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Rankings</Text>
+        {rankings.length === 0 ? <Text style={styles.empty}>No results entered yet</Text> : rankings.map((r) => (
+          <View key={r.uuid} style={styles.rank}>
+            <Text style={styles.medal}>{MEDAL[r.placement] || `#${r.placement}`}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name}>{r.athlete?.name || 'Unknown athlete'}{r._pending ? '  ⏳' : ''}</Text>
+              <Text style={styles.meta}>{r.athlete?.house || '—'}{r.athlete?.bib_number ? ` · Bib #${r.athlete.bib_number}` : ''}</Text>
+            </View>
+            <Text style={styles.time}>{r.time || ''}</Text>
+          </View>
+        ))}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  header: { paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
-  title: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  subtitle: { fontSize: 13, color: '#666', marginTop: 4 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 10 },
-  housePointsSection: { padding: 20, backgroundColor: '#fff', marginBottom: 8 },
-  houseRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  houseName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  housePointsValue: { fontSize: 14, fontWeight: '700', color: '#1F4788' },
-  rankingsSection: { flex: 1, padding: 20 },
-  rankItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 12, borderRadius: 8, marginBottom: 8 },
-  medal: { fontSize: 20, width: 40, textAlign: 'center' },
-  athleteName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  athleteHouse: { fontSize: 12, color: '#999', marginTop: 2 },
-  time: { fontSize: 13, color: '#666', fontWeight: '600' },
-  emptyText: { textAlign: 'center', color: '#999', fontSize: 14, marginTop: 30 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  header: { backgroundColor: colors.card, padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+  title: { fontSize: 17, fontWeight: '800', color: colors.text },
+  sub: { fontSize: 12, color: colors.muted, marginTop: 4 },
+  card: { backgroundColor: colors.card, margin: 16, marginBottom: 0, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  cardTitle: { fontSize: 15, fontWeight: '800', color: colors.text, marginBottom: 8 },
+  empty: { color: colors.muted, paddingVertical: 8 },
+  row: { flexDirection: 'row', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#F1F2F4' },
+  head: { color: colors.muted, fontWeight: '700', fontSize: 12 },
+  house: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
+  cell: { width: 42, textAlign: 'center', fontSize: 14, color: colors.text },
+  points: { fontWeight: '800', color: colors.primary },
+  rank: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderTopWidth: 1, borderTopColor: '#F1F2F4', gap: 8 },
+  medal: { width: 40, fontSize: 20, textAlign: 'center', fontWeight: '800', color: colors.muted },
+  name: { fontSize: 14, fontWeight: '700', color: colors.text },
+  meta: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  time: { fontSize: 13, fontWeight: '700', color: colors.text },
 });
