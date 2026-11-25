@@ -2,7 +2,7 @@
 
 React Native (Expo SDK 52) Android app for the **Offline-First Mobile Sports Event Coordination System featuring AI-Optimised Dashboards via SDUI** (Kingston University BSc Software Engineering final project).
 
-It talks to the Laravel API in [`sports-cordination-backend`](https://github.com/muwafaqDAVcreator/sports-cordination-backend).
+It talks to the Laravel API in [`sports-cordination-backend`](https://github.com/muwafaqDAVcreator/sports-cordination-backend), which is hosted at `https://api-app.muwamurad.com/api` for testing.
 
 ## Features
 
@@ -16,18 +16,31 @@ It talks to the Laravel API in [`sports-cordination-backend`](https://github.com
 
 ## Requirements
 
-Node 22, Android Studio emulator (or a phone) with Expo Go, and the backend API running on port 8000.
+Node 22 and an Android Studio emulator (or a phone) with Expo Go.
 
 ## Run
 
+By default the app uses the hosted API, so this is enough:
+
 ```bash
 npm install
-adb reverse tcp:8000 tcp:8000   # emulator reaches the API as localhost
-adb reverse tcp:8081 tcp:8081
 npx expo start                  # press "a" for Android
 ```
 
-For a physical phone, set `API_URL` in `src/config.js` to your PC's LAN address and run the API with `php artisan serve --host=0.0.0.0`.
+To use a local API instead, set `EXPO_PUBLIC_API_URL` before starting Expo:
+
+```bash
+adb reverse tcp:8000 tcp:8000   # emulator reaches the API as localhost
+EXPO_PUBLIC_API_URL=http://localhost:8000/api npx expo start
+```
+
+## Build the Android APK
+
+```bash
+npx expo prebuild --platform android
+cd android && ./gradlew assembleRelease
+# APK: android/app/build/outputs/apk/release/app-release.apk
+```
 
 ## Tests
 
